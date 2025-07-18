@@ -13,7 +13,6 @@ import {
   getMyProfile,
   isAuthenticated,
   getUserPosts,
-  requestInstructorAccess,
 } from "../api";
 
 const API_BASE = "http://127.0.0.1:8000/api/chat";
@@ -749,7 +748,7 @@ const Profile = () => {
                 {/* Action Buttons */}
                 <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
                   {!username ? (
-                    // Own profile - show edit, instructor request, and logout buttons
+                    // My Profile (My Profile) - show edit, instructor request, and logout buttons
                     <>
                       <button className="bg-[#FFA726] text-white px-6 sm:px-7 md:px-8 py-2.5 sm:py-3 rounded-xl sm:rounded-2xl font-medium hover:bg-orange-400 hover:shadow-lg hover:scale-105 transition-all duration-300 flex items-center justify-center space-x-2">
                         <svg
@@ -853,9 +852,8 @@ const Profile = () => {
                       )}
                     </>
                   ) : (
-                    // Other user's profile - show follow/unfollow and message button
-                    user &&
-                    user.username !== localStorage.getItem("user") && (
+                    // Other User's Profile (Public Profile) - show follow/unfollow and message button
+                    user && (
                       <>
                         <button
                           onClick={isFollowing ? handleUnfollow : handleFollow}

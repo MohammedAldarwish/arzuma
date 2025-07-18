@@ -53,7 +53,47 @@ export const SkeletonPost = () => <SkeletonCard className="mb-6" />;
 export const SkeletonFeed = ({ count = 3 }) => (
   <div className="space-y-6">
     {Array.from({ length: count }).map((_, i) => (
-      <SkeletonPost key={i} />
+      <div
+        key={i}
+        className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between p-4">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 bg-gray-200 rounded-full animate-pulse"></div>
+            <div className="flex-1">
+              <div className="h-4 bg-gray-200 rounded w-1/3 mb-2 animate-pulse"></div>
+              <div className="h-3 bg-gray-200 rounded w-1/4 animate-pulse"></div>
+            </div>
+          </div>
+          <div className="w-5 h-5 bg-gray-200 rounded animate-pulse"></div>
+        </div>
+
+        {/* Image */}
+        <div className="px-4 pb-4">
+          <div className="w-full h-80 bg-gray-200 rounded-xl animate-pulse"></div>
+        </div>
+
+        {/* Content */}
+        <div className="px-4 pb-4">
+          <div className="space-y-2">
+            <div className="h-4 bg-gray-200 rounded w-full animate-pulse"></div>
+            <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse"></div>
+          </div>
+          <div className="flex gap-2 mt-3">
+            <div className="h-6 bg-gray-200 rounded-full w-16 animate-pulse"></div>
+            <div className="h-6 bg-gray-200 rounded-full w-20 animate-pulse"></div>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="px-4 py-3 border-t border-gray-100 bg-gray-50">
+          <div className="flex items-center space-x-4">
+            <div className="h-8 bg-gray-200 rounded-xl w-20 animate-pulse"></div>
+            <div className="h-8 bg-gray-200 rounded-xl w-16 animate-pulse"></div>
+          </div>
+        </div>
+      </div>
     ))}
   </div>
 );

@@ -1,6 +1,7 @@
 from pathlib import Path
 from datetime import timedelta
 import os
+from pickle import TRUE
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -17,9 +18,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-+fx+0)qyseifcimut$l($@i0$h11cu92u-nbran_1ckc&14g$b')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
+DEBUG = True
 
-ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1,0.0.0.0').split(',')
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.178.107', '0.0.0.0']
 
 
 # Application definition
@@ -43,14 +44,15 @@ INSTALLED_APPS = [
     #apps 
     'accounts',
     'posts',
+    'story',
+    'courses',  # Added courses app
 
     # django channels
     'channels',
 
     'django_extensions',
 
-    'story',
-    'course',
+  
 ]
 
 MIDDLEWARE = [
@@ -108,16 +110,24 @@ CHANNEL_LAYERS = {
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+# DATABASES = {
+#     'default': {
+#         'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
+#         'NAME': os.getenv('DATABASE_NAME', 'arzuma_db'),
+#         'USER': os.getenv('DATABASE_USER', 'arzuma_user'),
+#         'PASSWORD': os.getenv('DATABASE_PASSWORD', 'arzuma_password'),
+#         'HOST': os.getenv('DATABASE_HOST', 'postgres'),
+#         'PORT': os.getenv('DATABASE_PORT', '5432'),
+#     }
+# }
+
 DATABASES = {
     'default': {
-        'ENGINE': os.getenv('DATABASE_ENGINE', 'django.db.backends.postgresql'),
-        'NAME': os.getenv('DATABASE_NAME', 'arzuma_db'),
-        'USER': os.getenv('DATABASE_USER', 'arzuma_user'),
-        'PASSWORD': os.getenv('DATABASE_PASSWORD', 'arzuma_password'),
-        'HOST': os.getenv('DATABASE_HOST', 'postgres'),
-        'PORT': os.getenv('DATABASE_PORT', '5432'),
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
 
 
 # Password validation
@@ -178,6 +188,9 @@ CSRF_TRUSTED_ORIGINS = [
     "http://localhost:3001",
     "http://127.0.0.1:3001",
 ]
+
+# Allow all origins for media files
+CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_HEADERS = [
     'accept',
@@ -268,3 +281,11 @@ LOGGING = {
         },
     },
 }
+
+# Stripe Configuration
+STRIPE_SECRET_KEY = os.getenv('STRIPE_SECRET_KEY', 'sk_test_your_stripe_secret_key')
+STRIPE_PUBLISHABLE_KEY = os.getenv('STRIPE_PUBLISHABLE_KEY', 'pk_test_your_stripe_publishable_key')
+STRIPE_WEBHOOK_SECRET = os.getenv('STRIPE_WEBHOOK_SECRET', 'whsec_your_webhook_secret')
+
+# Frontend URL for Stripe redirects
+FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')

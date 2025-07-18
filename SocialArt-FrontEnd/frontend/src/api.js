@@ -590,16 +590,18 @@ export async function getStories() {
 export async function createStory(file) {
   try {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', file); // Use 'file' field to match backend model
     const response = await authFetch(`${API_BASE}/api/stories/create/`, {
       method: 'POST',
       body: formData,
     });
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Story creation failed:', response.status, errorText);
       throw new Error(`Failed to create story: ${response.status}`);
     }
     const data = await response.json();
-    console.log("Stories from API:", data);
+    console.log("Story created successfully:", data);
     return data;
   } catch (error) {
     console.error('Create story error:', error);
@@ -626,449 +628,320 @@ export async function deleteStory(storyId) {
   }
 }
 
-// ===== COURSE API FUNCTIONS =====
-
-/**
- * Get all approved courses
- * @returns {Promise<Array>} Array of courses
- */
-export async function getCourses() {
+// Course APIs
+export const getCourses = async (filters = {}) => {
   try {
-    const response = await fetch(`${API_BASE}/api/course/courses/`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch courses: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.results || data;
-  } catch (error) {
-    console.error('Get courses error:', error);
-    throw error;
-  }
-}
-
-/**
- * Get a specific course by ID
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Object>} Course object
- */
-export async function getCourse(courseId) {
-  try {
-    const response = await fetch(`${API_BASE}/api/course/courses/${courseId}/`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch course: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Get course error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create a new course (instructors only)
- * @param {FormData} courseData - Course data including:
- *   - title: Course title
- *   - description: Course description  
- *   - price: Course price (for paid courses)
- *   - is_free: Boolean indicating if course is free
- *   - course_image: Course image file
- *   - stripe_session_id: Stripe session ID (required for paid courses)
- * @returns {Promise<Object>} Created course
- */
-export async function createCourse(courseData) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/courses/`, {
-      method: 'POST',
-      body: courseData, // FormData will be sent directly
+    const params = new URLSearchParams();
+    Object.keys(filters).forEach(key => {
+      if (filters[key] !== undefined && filters[key] !== null) {
+        params.append(key, filters[key]);
+      }
     });
     
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Failed to create course: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Create course error:', error);
-    throw error;
-  }
-}
-
-/**
- * Update a course (instructors only)
- * @param {number|string} courseId - The course ID
- * @param {Object} courseData - Updated course data
- * @returns {Promise<Object>} Updated course
- */
-export async function updateCourse(courseId, courseData) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/courses/${courseId}/`, {
-      method: 'PUT',
+    const response = await fetch(`${API_BASE}/courses/?${params}`, {
       headers: {
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(courseData),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to update course: ${response.status}`);
+      throw new Error('Failed to fetch courses');
     }
     
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error('Update course error:', error);
+    console.error('Error fetching courses:', error);
     throw error;
   }
-}
+};
 
-/**
- * Delete a course (instructors only)
- * @param {number|string} courseId - The course ID
- * @returns {Promise<boolean>} Success status
- */
-export async function deleteCourse(courseId) {
+export const getCourse = async (courseId) => {
   try {
-    const response = await authFetch(`${API_BASE}/api/course/courses/${courseId}/`, {
-      method: 'DELETE',
+    const response = await fetch(`${API_BASE}/courses/${courseId}/`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to delete course: ${response.status}`);
+      throw new Error('Failed to fetch course');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching course:', error);
+    throw error;
+  }
+};
+
+export const createCourse = async (courseData) => {
+  try {
+    const formData = new FormData();
+    formData.append('title', courseData.title);
+    formData.append('description', courseData.description);
+    if (courseData.thumbnail) {
+      formData.append('thumbnail', courseData.thumbnail);
+    }
+    
+    const response = await fetch(`${API_BASE}/courses/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create course');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating course:', error);
+    throw error;
+  }
+};
+
+export const updateCourse = async (courseId, courseData) => {
+  try {
+    const formData = new FormData();
+    formData.append('title', courseData.title);
+    formData.append('description', courseData.description);
+    if (courseData.thumbnail) {
+      formData.append('thumbnail', courseData.thumbnail);
+    }
+    
+    const response = await fetch(`${API_BASE}/courses/${courseId}/`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+      },
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update course');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating course:', error);
+    throw error;
+  }
+};
+
+export const deleteCourse = async (courseId) => {
+  try {
+    const response = await fetch(`${API_BASE}/courses/${courseId}/`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete course');
     }
     
     return true;
   } catch (error) {
-    console.error('Delete course error:', error);
+    console.error('Error deleting course:', error);
     throw error;
   }
-}
+};
 
-/**
- * Get lessons for a specific course
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Array>} Array of lessons
- */
-export async function getCourseLessons(courseId) {
+export const enrollInCourse = async (courseId) => {
   try {
-    const response = await authFetch(`${API_BASE}/api/course/lesson/?course=${courseId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch lessons: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.results || data;
-  } catch (error) {
-    console.error('Get course lessons error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create a new lesson (instructors only)
- * @param {Object} lessonData - Lesson data
- * @returns {Promise<Object>} Created lesson
- */
-export async function createLesson(lessonData) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/lesson/`, {
+    const response = await fetch(`${API_BASE}/courses/${courseId}/enroll/`, {
       method: 'POST',
       headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to enroll in course');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error enrolling in course:', error);
+    throw error;
+  }
+};
+
+// Lesson APIs
+export const getLessons = async (courseId) => {
+  try {
+    const response = await fetch(`${API_BASE}/lessons/?course=${courseId}`, {
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch lessons');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching lessons:', error);
+    throw error;
+  }
+};
+
+export const createLesson = async (lessonData) => {
+  try {
+    const response = await fetch(`${API_BASE}/lessons/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(lessonData),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to create lesson: ${response.status}`);
+      throw new Error('Failed to create lesson');
     }
     
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error('Create lesson error:', error);
+    console.error('Error creating lesson:', error);
     throw error;
   }
-}
+};
 
-/**
- * Get ratings for a specific course
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Array>} Array of ratings
- */
-export async function getCourseRatings(courseId) {
+export const updateLesson = async (lessonId, lessonData) => {
   try {
-    const response = await authFetch(`${API_BASE}/api/course/rating/?course=${courseId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch ratings: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.results || data;
-  } catch (error) {
-    console.error('Get course ratings error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create or update a course rating (enrolled users only)
- * @param {Object} ratingData - Rating data
- * @returns {Promise<Object>} Created/updated rating
- */
-export async function createCourseRating(ratingData) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/rating/`, {
-      method: 'POST',
+    const response = await fetch(`${API_BASE}/lessons/${lessonId}/`, {
+      method: 'PUT',
       headers: {
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify(ratingData),
+      body: JSON.stringify(lessonData),
     });
     
     if (!response.ok) {
-      throw new Error(`Failed to create rating: ${response.status}`);
+      throw new Error('Failed to update lesson');
     }
     
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error('Create course rating error:', error);
+    console.error('Error updating lesson:', error);
     throw error;
   }
-}
+};
 
-/**
- * Create Stripe checkout session for course enrollment
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Object>} Checkout session with URL
- */
-export async function createCheckoutSession(courseId) {
+export const deleteLesson = async (lessonId) => {
   try {
-    const response = await authFetch(`${API_BASE}/api/course/create-checkout-session/`, {
-      method: 'POST',
+    const response = await fetch(`${API_BASE}/lessons/${lessonId}/`, {
+      method: 'DELETE',
       headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ course_id: courseId }),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.detail || `Failed to create checkout session: ${response.status}`;
-      throw new Error(errorMessage);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Create checkout session error:', error);
-    throw error;
-  }
-}
-
-/**
- * Check if user is enrolled in a course
- * @param {number|string} courseId - The course ID
- * @returns {Promise<boolean>} Enrollment status
- */
-export async function checkEnrollment(courseId) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/enrollment/?course=${courseId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to check enrollment: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.results && data.results.length > 0;
-  } catch (error) {
-    console.error('Check enrollment error:', error);
-    return false;
-  }
-}
-
-/**
- * Get enrollment details for a course
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Object>} Enrollment details
- */
-export async function getEnrollmentDetails(courseId) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/enrollment/?course=${courseId}`);
-    
-    if (!response.ok) {
-      throw new Error(`Failed to get enrollment details: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data.results && data.results.length > 0 ? data.results[0] : null;
-  } catch (error) {
-    console.error('Get enrollment details error:', error);
-    return null;
-  }
-}
-
-/**
- * Enroll in a free course
- * @param {number|string} courseId - The course ID
- * @returns {Promise<Object>} Enrollment details
- */
-export async function enrollInFreeCourse(courseId) {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/enrollment/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ course: courseId }),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.detail || `Failed to enroll in free course: ${response.status}`;
-      throw new Error(errorMessage);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Enroll in free course error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create Stripe account link for instructor setup
- * @returns {Promise<Object>} Account link with URL
- */
-export async function createStripeAccountLink() {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/create-account-link/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      const errorMessage = errorData.detail || `Failed to create account link: ${response.status}`;
-      throw new Error(errorMessage);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Create account link error:', error);
-    throw error;
-  }
-}
-
-/**
- * Request instructor access (for non-instructors)
- * @returns {Promise<Object>} API response
- */
-export async function requestInstructorAccess() {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/request-instructor/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({}),
-    });
-    
-    if (!response.ok) {
-      throw new Error(`Failed to request instructor access: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Request instructor access error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create Stripe Connect onboarding for user
- * @returns {Promise<Object>} Onboarding response with account link URL
- */
-export async function createStripeOnboarding() {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/stripe/onboarding/`, {
-      method: 'POST',
-      headers: {
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Failed to create Stripe onboarding: ${response.status}`);
+      throw new Error('Failed to delete lesson');
     }
     
-    const data = await response.json();
-    return data;
+    return true;
   } catch (error) {
-    console.error('Create Stripe onboarding error:', error);
+    console.error('Error deleting lesson:', error);
     throw error;
   }
-}
+};
 
-/**
- * Get Stripe account status for current user
- * @returns {Promise<Object>} Account status information
- */
-export async function getStripeAccountStatus() {
+// Review APIs
+export const getCourseReviews = async (courseId) => {
   try {
-    const response = await authFetch(`${API_BASE}/api/course/stripe/account-status/`);
-    
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Failed to get account status: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error('Get Stripe account status error:', error);
-    throw error;
-  }
-}
-
-/**
- * Create Stripe dashboard link for user
- * @returns {Promise<Object>} Dashboard link response
- */
-export async function createStripeDashboardLink() {
-  try {
-    const response = await authFetch(`${API_BASE}/api/course/stripe/dashboard/`, {
-      method: 'POST',
+    const response = await fetch(`${API_BASE}/courses/${courseId}/reviews/`, {
       headers: {
+        'Authorization': `Bearer ${getToken()}`,
         'Content-Type': 'application/json',
       },
     });
     
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.detail || `Failed to create dashboard link: ${response.status}`);
+      throw new Error('Failed to fetch reviews');
     }
     
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch (error) {
-    console.error('Create Stripe dashboard link error:', error);
+    console.error('Error fetching reviews:', error);
     throw error;
   }
-}
+};
+
+export const createCourseReview = async (courseId, reviewData) => {
+  try {
+    const response = await fetch(`${API_BASE}/courses/${courseId}/reviews/`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(reviewData),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create review');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error creating review:', error);
+    throw error;
+  }
+};
+
+export const updateCourseReview = async (courseId, reviewId, reviewData) => {
+  try {
+    const response = await fetch(`${API_BASE}/courses/${courseId}/reviews/${reviewId}/`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(reviewData),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update review');
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error updating review:', error);
+    throw error;
+  }
+};
+
+export const deleteCourseReview = async (courseId, reviewId) => {
+  try {
+    const response = await fetch(`${API_BASE}/courses/${courseId}/reviews/${reviewId}/`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${getToken()}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to delete review');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error deleting review:', error);
+    throw error;
+  }
+};

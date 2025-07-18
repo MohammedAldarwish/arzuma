@@ -8,7 +8,7 @@ urlpatterns = [
     path('api/accounts/', include('accounts.urls')),
     path('api/posts/', include('posts.urls')),
     path('api/stories/', include('story.urls')),
-    path('api/course/', include('course.urls')),
+    path('api/courses/', include('courses.urls')),  # Added courses URLs
 ]
 if settings.DEBUG:
     urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

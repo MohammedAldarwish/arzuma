@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import PostCard from "./PostCard";
 import { SkeletonFeed } from "./Skeleton";
 import { useAppState } from "./AppStateContext";
+import StoryViewer from "./StoryViewer";
 import {
   getArtPosts,
   likePost,
@@ -13,8 +14,6 @@ import {
   deleteStory,
 } from "../api";
 import { getAccessToken } from "../api";
-
-const STORY_DURATION = 90_000; // 90 ثانية لكل ستوري
 
 // دالة لتجميع ستوريز كل مستخدم في قائمة واحدة
 function groupStoriesByUser(stories) {
@@ -28,7 +27,7 @@ function groupStoriesByUser(stories) {
       userObj = story.user;
     } else if (typeof story.user === "number") {
       userId = story.user;
-      userObj = { id: userId, username: "User" };
+      userObj = { id: userId, username: "Unknown" };
     }
     if (!userId) return;
     if (!map.has(userId)) {
@@ -41,6 +40,8 @@ function groupStoriesByUser(stories) {
 }
 
 const Feed = () => {
+  console.log("Feed component rendered");
+
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -54,12 +55,10 @@ const Feed = () => {
   const [storiesLoading, setStoriesLoading] = useState(true);
   const [storiesError, setStoriesError] = useState(null);
   const [uploadingStory, setUploadingStory] = useState(false);
-  const [activeStoryIndex, setActiveStoryIndex] = useState(null);
-  const [storyProgress, setStoryProgress] = useState(0);
-  const progressRef = useRef();
-  const timerRef = useRef();
-  const [activeUserStories, setActiveUserStories] = useState(null); // قائمة ستوريز المستخدم المفتوحة
-  const [activeUserStoryIndex, setActiveUserStoryIndex] = useState(0); // مؤشر الستوري الحالية للمستخدم
+
+  const [showStoryViewer, setShowStoryViewer] = useState(false);
+  const [selectedUserIndex, setSelectedUserIndex] = useState(0);
+  const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
 
   // Simplify the AppStateContext usage
   let userPreferences = { showAnimations: true };
@@ -110,34 +109,6 @@ const Feed = () => {
     };
     fetchStories();
   }, []);
-
-  // عند فتح ستوري: ابدأ العداد
-  useEffect(() => {
-    if (activeStoryIndex === null) return;
-    setStoryProgress(0);
-    if (timerRef.current) clearInterval(timerRef.current);
-    const start = Date.now();
-    timerRef.current = setInterval(() => {
-      const elapsed = Date.now() - start;
-      setStoryProgress(Math.min(1, elapsed / STORY_DURATION));
-      if (elapsed >= STORY_DURATION) {
-        handleNextStory();
-      }
-    }, 50);
-    return () => clearInterval(timerRef.current);
-  }, [activeStoryIndex]);
-
-  // إغلاق الستوري عند الضغط على زر Esc
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (activeStoryIndex === null) return;
-      if (e.key === "Escape") closeStoryModal();
-      if (e.key === "ArrowRight") handleNextStory();
-      if (e.key === "ArrowLeft") handlePrevStory();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [activeStoryIndex]);
 
   const fetchPosts = async () => {
     try {
@@ -238,163 +209,149 @@ const Feed = () => {
     try {
       const user = localStorage.getItem("user");
       if (!user) return null;
-      const parsedUser = JSON.parse(user);
-      return typeof parsedUser === "string" ? parsedUser : parsedUser?.username;
-    } catch {
+      const userData = JSON.parse(user);
+      return userData.username;
+    } catch (error) {
+      console.error("Error getting current username:", error);
       return null;
     }
   };
 
-  // دالة مساعدة للتحقق من إعجاب المستخدم الحالي
   const isUserLiked = (post) => {
-    const username = getCurrentUsername();
-    if (!username || !post.likes || !Array.isArray(post.likes)) return false;
-
-    return post.likes.some(
-      (like) =>
-        like &&
-        like.user &&
-        like.user.trim().toLowerCase() === username.trim().toLowerCase()
-    );
+    const currentUsername = getCurrentUsername();
+    return post.likes?.some((like) => like.user === currentUsername) || false;
   };
 
   const handleLike = async (postId) => {
-    // احفظ الحالة السابقة للتراجع عنها في حالة الفشل
-    const currentPost = posts.find((p) => p.id === postId);
-    const wasLiked = isUserLiked(currentPost);
-    const prevLikeCount = currentPost.like_count || 0;
+    if (likeDebounce[postId]) return;
+
+    setLikeDebounce((prev) => ({ ...prev, [postId]: true }));
+    setLikeLoading((prev) => ({ ...prev, [postId]: true }));
 
     try {
-      const token = getAccessToken();
-      if (!token) {
-        alert("Please login to like posts");
-        return;
+      const currentUsername = getCurrentUsername();
+      const isLiked = isUserLiked(posts.find((post) => post.id === postId));
+
+      if (isLiked) {
+        // Unlike
+        const likeToRemove = posts
+          .find((post) => post.id === postId)
+          ?.likes?.find((like) => like.user === currentUsername);
+
+        if (likeToRemove) {
+          await unlikePost(likeToRemove.id);
+          setPosts((prevPosts) =>
+            prevPosts.map((post) => {
+              if (post.id === postId) {
+                return {
+                  ...post,
+                  like_count: Math.max(0, (post.like_count || 0) - 1),
+                  likes:
+                    post.likes?.filter((like) => like.id !== likeToRemove.id) ||
+                    [],
+                };
+              }
+              return post;
+            })
+          );
+        }
+      } else {
+        // Like
+        await likePost(postId);
+        setPosts((prevPosts) =>
+          prevPosts.map((post) => {
+            if (post.id === postId) {
+              return {
+                ...post,
+                like_count: (post.like_count || 0) + 1,
+                likes: [
+                  ...(post.likes || []),
+                  {
+                    id: Date.now(), // Temporary ID
+                    user: currentUsername,
+                    created_at: new Date().toISOString(),
+                  },
+                ],
+              };
+            }
+            return post;
+          })
+        );
       }
-
-      // Optimistic Update - تحديث فوري في الواجهة (مثل إنستجرام)
-      setPosts((prevPosts) =>
-        prevPosts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                like_count: wasLiked
-                  ? Math.max(0, prevLikeCount - 1)
-                  : prevLikeCount + 1,
-                likes: wasLiked
-                  ? (p.likes || []).filter(
-                      (like) =>
-                        like && like.user && like.user !== getCurrentUsername()
-                    )
-                  : [
-                      ...(p.likes || []).filter(
-                        (like) =>
-                          like &&
-                          like.user &&
-                          like.user !== getCurrentUsername()
-                      ),
-                      { user: getCurrentUsername() },
-                    ],
-              }
-            : p
-        )
-      );
-
-      // أرسل طلب toggle للـ like في الخلفية (بدون تحديث الواجهة)
-      await likePost(postId);
-    } catch (err) {
-      console.error("Like/Unlike error:", err);
-
-      // في حالة الفشل فقط، أعيد الحالة السابقة
-      setPosts((prevPosts) =>
-        prevPosts.map((p) =>
-          p.id === postId
-            ? {
-                ...p,
-                like_count: prevLikeCount,
-                likes: wasLiked
-                  ? [
-                      ...(p.likes || []).filter(
-                        (like) =>
-                          like &&
-                          like.user &&
-                          like.user !== getCurrentUsername()
-                      ),
-                      { user: getCurrentUsername() },
-                    ]
-                  : (p.likes || []).filter(
-                      (like) =>
-                        like && like.user && like.user !== getCurrentUsername()
-                    ),
-              }
-            : p
-        )
-      );
-
-      alert("فشل في الإعجاب أو إلغاء الإعجاب: " + (err.message || err));
+    } catch (error) {
+      console.error("Error handling like:", error);
+    } finally {
+      setLikeLoading((prev) => ({ ...prev, [postId]: false }));
+      setTimeout(() => {
+        setLikeDebounce((prev) => ({ ...prev, [postId]: false }));
+      }, 1000);
     }
   };
 
   const handleComment = async (postId) => {
-    try {
-      const content = commentText[postId];
-      if (!content || !content.trim()) {
-        alert("Please enter a comment");
-        return;
-      }
+    const comment = commentText[postId]?.trim();
+    if (!comment) return;
 
-      await createComment(postId, content);
+    try {
+      await createComment(postId, comment);
       setCommentText((prev) => ({ ...prev, [postId]: "" }));
 
-      // Refresh comments
-      const updatedPosts = posts.map((post) => {
-        if (post.id === postId) {
-          return { ...post, comment_count: (post.comment_count || 0) + 1 };
-        }
-        return post;
-      });
-      setPosts(updatedPosts);
-    } catch (err) {
-      console.error("Comment error:", err);
-      alert("Failed to post comment");
+      // Refresh comments for this post
+      const comments = await getComments(postId);
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => {
+          if (post.id === postId) {
+            return {
+              ...post,
+              comment_count: (post.comment_count || 0) + 1,
+              comments: comments,
+            };
+          }
+          return post;
+        })
+      );
+    } catch (error) {
+      console.error("Error creating comment:", error);
     }
   };
 
   const toggleComments = async (postId) => {
-    if (!showComments[postId]) {
+    if (showComments[postId]) {
+      setShowComments((prev) => ({ ...prev, [postId]: false }));
+    } else {
       try {
         const comments = await getComments(postId);
-        const updatedPosts = posts.map((post) => {
-          if (post.id === postId) {
-            return { ...post, comments };
-          }
-          return post;
-        });
-        setPosts(updatedPosts);
-      } catch (err) {
-        console.error("Fetch comments error:", err);
+        setPosts((prevPosts) =>
+          prevPosts.map((post) => {
+            if (post.id === postId) {
+              return { ...post, comments: comments };
+            }
+            return post;
+          })
+        );
+        setShowComments((prev) => ({ ...prev, [postId]: true }));
+      } catch (error) {
+        console.error("Error loading comments:", error);
       }
     }
-    setShowComments((prev) => ({ ...prev, [postId]: !prev[postId] }));
   };
 
   const loadMore = () => {
-    if (hasNext && !loading) {
+    if (!loading && hasNext) {
       setPage((prev) => prev + 1);
     }
   };
 
-  // رفع ستوري جديدة
   const handleStoryUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    setUploadingStory(true);
+
     try {
+      setUploadingStory(true);
       await createStory(file);
-      // أعد تحميل الستوري بعد الرفع
+      // Refresh stories
       const data = await getStories();
-      console.log("Stories from API (after upload):", data);
       setStories(Array.isArray(data) ? data : data.results || []);
-      alert("تم رفع الستوري بنجاح!");
     } catch (err) {
       alert("فشل رفع الستوري: " + (err.message || err));
     } finally {
@@ -402,67 +359,14 @@ const Feed = () => {
     }
   };
 
-  const openStoryModal = (index) => {
-    setActiveStoryIndex(index);
-    setStoryProgress(0);
-  };
-  const closeStoryModal = () => {
-    setActiveStoryIndex(null);
-    setStoryProgress(0);
-  };
-  const handleNextStory = () => {
-    if (activeStoryIndex === null) return;
-    if (activeStoryIndex < stories.length - 1) {
-      setActiveStoryIndex(activeStoryIndex + 1);
-    } else {
-      closeStoryModal();
-    }
-  };
-  const handlePrevStory = () => {
-    if (activeStoryIndex > 0) {
-      setActiveStoryIndex(activeStoryIndex - 1);
-    }
+  const openStoryViewer = (userIndex) => {
+    setSelectedUserIndex(userIndex);
+    setSelectedStoryIndex(0);
+    setShowStoryViewer(true);
   };
 
-  // دعم السحب (Swipe) على الجوال
-  const touchStartX = useRef(null);
-  const handleTouchStart = (e) => {
-    touchStartX.current = e.touches[0].clientX;
-  };
-  const handleTouchEnd = (e) => {
-    if (touchStartX.current === null) return;
-    const deltaX = e.changedTouches[0].clientX - touchStartX.current;
-    if (deltaX > 50) handlePrevStory();
-    else if (deltaX < -50) handleNextStory();
-    touchStartX.current = null;
-  };
-
-  // بدلاً من استخدام stories مباشرة، استخدم قائمة مجمعة لكل مستخدم
-  const groupedStories = groupStoriesByUser(stories);
-
-  // عند فتح ستوري مستخدم: افتح كل ستوريز هذا المستخدم
-  const openUserStoriesModal = (userStories) => {
-    setActiveUserStories(userStories);
-    setActiveUserStoryIndex(0);
-    setStoryProgress(0);
-  };
-  const closeUserStoriesModal = () => {
-    setActiveUserStories(null);
-    setActiveUserStoryIndex(0);
-    setStoryProgress(0);
-  };
-  const handleNextUserStory = () => {
-    if (!activeUserStories) return;
-    if (activeUserStoryIndex < activeUserStories.stories.length - 1) {
-      setActiveUserStoryIndex(activeUserStoryIndex + 1);
-    } else {
-      closeUserStoriesModal();
-    }
-  };
-  const handlePrevUserStory = () => {
-    if (activeUserStoryIndex > 0) {
-      setActiveUserStoryIndex(activeUserStoryIndex - 1);
-    }
+  const closeStoryViewer = () => {
+    setShowStoryViewer(false);
   };
 
   if (loading && posts.length === 0) {
@@ -593,47 +497,35 @@ const Feed = () => {
             <div className="flex items-center">جاري التحميل...</div>
           ) : storiesError ? (
             <div className="flex items-center text-red-500">{storiesError}</div>
-          ) : groupedStories.length === 0 ? (
-            <div className="flex items-center text-gray-400">لا يوجد ستوري</div>
           ) : (
-            groupedStories.map((group, idx) => (
-              <div
-                key={group.user?.user?.id || idx}
-                className="flex-shrink-0 text-center"
-              >
+            groupStoriesByUser(stories).map((userStories, userIndex) => (
+              <div key={userIndex} className="flex-shrink-0 text-center">
                 <div
                   className="w-16 h-16 rounded-full p-0.5 bg-[#FFA726] mb-2 flex items-center justify-center overflow-hidden border-2 border-white dark:border-dark-800 cursor-pointer hover:scale-105 transition-transform"
-                  onClick={() => openUserStoriesModal(group)}
-                  title={group.user?.user?.username || "Story"}
+                  onClick={() => openStoryViewer(userIndex)}
+                  title={userStories.user?.username || "Story"}
                 >
-                  {/* صورة الستوري الأولى للمستخدم */}
-                  {group.stories[0].media_type === "image" ? (
+                  {/* صورة البروفايل للمستخدم */}
+                  {userStories.user?.avatar ? (
                     <img
                       src={
-                        group.stories[0].file.startsWith("http")
-                          ? group.stories[0].file
-                          : `http://127.0.0.1:8000${group.stories[0].file}`
+                        userStories.user.avatar.startsWith("http")
+                          ? userStories.user.avatar
+                          : `http://127.0.0.1:8000${userStories.user.avatar}`
                       }
-                      alt={group.user?.user?.username || "Story"}
+                      alt={userStories.user?.username || "User"}
                       className="w-full h-full object-cover rounded-full"
                     />
-                  ) : group.stories[0].media_type === "video" ? (
-                    <video
-                      src={
-                        group.stories[0].file.startsWith("http")
-                          ? group.stories[0].file
-                          : `http://127.0.0.1:8000${group.stories[0].file}`
-                      }
-                      className="w-full h-full object-cover rounded-full"
-                      controls={false}
-                      autoPlay
-                      muted
-                      loop
-                    />
-                  ) : null}
+                  ) : (
+                    <div className="w-full h-full bg-gray-600 flex items-center justify-center text-white font-semibold text-lg">
+                      {(userStories.user?.username || "U")
+                        .charAt(0)
+                        .toUpperCase()}
+                    </div>
+                  )}
                 </div>
                 <p className="text-xs text-gray-600 dark:text-gray-300 truncate w-16">
-                  {group.user?.user?.username?.split(" ")[0] || "User"}
+                  {userStories.user?.username?.split(" ")[0] || "Unknown"}
                 </p>
               </div>
             ))
@@ -641,170 +533,14 @@ const Feed = () => {
         </div>
       </div>
 
-      {/* Modal لعرض ستوريز المستخدم المتسلسلة */}
-      {activeUserStories && activeUserStories.stories[activeUserStoryIndex] && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 backdrop-blur-sm animate-fade-in"
-          onClick={closeUserStoriesModal}
-        >
-          <div
-            className="relative flex flex-col items-center justify-center w-full h-full max-w-full max-h-full"
-            style={{ minWidth: 0, minHeight: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
-          >
-            {/* شريط التقدم */}
-            <div className="absolute top-0 left-0 w-full flex space-x-1 px-4 pt-4 z-20">
-              {activeUserStories.stories.map((_, idx) => (
-                <div
-                  key={idx}
-                  className="flex-1 h-1 rounded bg-white/30 overflow-hidden"
-                  style={{ minWidth: 0 }}
-                >
-                  <div
-                    className="h-full bg-[#FFA726] transition-all duration-100"
-                    style={{
-                      width:
-                        idx < activeUserStoryIndex
-                          ? "100%"
-                          : idx === activeUserStoryIndex
-                          ? `${Math.round(storyProgress * 100)}%`
-                          : "0%",
-                    }}
-                  ></div>
-                </div>
-              ))}
-            </div>
-            {/* زر إغلاق */}
-            <button
-              className="absolute top-4 right-4 bg-black bg-opacity-60 rounded-full p-2 text-white hover:bg-opacity-90 focus:outline-none z-30"
-              onClick={closeUserStoriesModal}
-              aria-label="إغلاق"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-            {/* زر السابق/التالي */}
-            {activeUserStoryIndex > 0 && (
-              <button
-                className="absolute left-2 md:left-8 top-1/2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-opacity-70 text-white rounded-full p-2 z-30"
-                onClick={handlePrevUserStory}
-                aria-label="السابق"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15 19l-7-7 7-7"
-                  />
-                </svg>
-              </button>
-            )}
-            {activeUserStoryIndex < activeUserStories.stories.length - 1 && (
-              <button
-                className="absolute right-2 md:right-8 top-1/2 -translate-y-1/2 bg-black bg-opacity-40 hover:bg-opacity-70 text-white rounded-full p-2 z-30"
-                onClick={handleNextUserStory}
-                aria-label="التالي"
-              >
-                <svg
-                  className="w-6 h-6"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            )}
-            {/* عرض الستوري */}
-            <div
-              className="flex flex-col items-center justify-center w-full h-full"
-              style={{
-                minHeight: "100vh",
-                minWidth: "100vw",
-                maxWidth: "100vw",
-                maxHeight: "100vh",
-              }}
-            >
-              <div
-                className="relative flex items-center justify-center w-full h-full"
-                style={{
-                  width: "100vw",
-                  height: "100vh",
-                  maxWidth: 480,
-                  maxHeight: 800,
-                  margin: "auto",
-                  borderRadius: 24,
-                  background: "#111",
-                  boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
-                  overflow: "hidden",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {activeUserStories.stories[activeUserStoryIndex].media_type ===
-                "image" ? (
-                  <img
-                    src={
-                      activeUserStories.stories[
-                        activeUserStoryIndex
-                      ].file.startsWith("http")
-                        ? activeUserStories.stories[activeUserStoryIndex].file
-                        : `http://127.0.0.1:8000${activeUserStories.stories[activeUserStoryIndex].file}`
-                    }
-                    alt={activeUserStories.user?.user?.username || "Story"}
-                    className="w-full h-full object-contain bg-black"
-                    style={{ maxHeight: "100%", maxWidth: "100%" }}
-                  />
-                ) : activeUserStories.stories[activeUserStoryIndex]
-                    .media_type === "video" ? (
-                  <video
-                    src={
-                      activeUserStories.stories[
-                        activeUserStoryIndex
-                      ].file.startsWith("http")
-                        ? activeUserStories.stories[activeUserStoryIndex].file
-                        : `http://127.0.0.1:8000${activeUserStories.stories[activeUserStoryIndex].file}`
-                    }
-                    className="w-full h-full object-contain bg-black"
-                    style={{ maxHeight: "100%", maxWidth: "100%" }}
-                    controls
-                    autoPlay
-                    muted
-                  />
-                ) : null}
-                {/* اسم المستخدم */}
-                <div className="absolute left-4 bottom-4 bg-black bg-opacity-60 px-3 py-1 rounded-full text-white text-sm font-semibold">
-                  {activeUserStories.user?.user?.username || "User"}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Story Viewer */}
+      {showStoryViewer && (
+        <StoryViewer
+          stories={groupStoriesByUser(stories)}
+          initialUserIndex={selectedUserIndex}
+          initialStoryIndex={selectedStoryIndex}
+          onClose={closeStoryViewer}
+        />
       )}
 
       {/* Posts Feed */}
@@ -826,7 +562,7 @@ const Feed = () => {
                             ? post.user.avatar
                             : `http://127.0.0.1:8000${post.user.avatar}`
                         }
-                        alt={post.user?.username || "User"}
+                        alt={post.user?.username || "Unknown"}
                         className="w-full h-full object-cover"
                         onError={(e) => {
                           e.target.style.display = "none";

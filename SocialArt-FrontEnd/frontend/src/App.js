@@ -228,6 +228,8 @@ const ProfilePage = () => (
   </div>
 );
 
+
+
 function App() {
   return (
     <ErrorBoundary>
@@ -257,6 +259,7 @@ function App() {
                 <Route path="/profile/:username" element={<ProfilePage />} />
                 <Route path="/admin" element={<AdminLogin />} />
                 <Route path="/admin/dashboard" element={<AdminPanel />} />
+
               </Routes>
             </BrowserRouter>
           </div>

@@ -1,152 +1,160 @@
 import React, { useState, useEffect } from "react";
-import LoadingSpinner from "./LoadingSpinner";
-import { getCourses, isAuthenticated } from "../api";
 import { Link } from "react-router-dom";
+import { getCourses } from "../api";
+import { useAuth } from "./AuthContext";
+import LoadingSpinner from "./LoadingSpinner";
 
 const Courses = () => {
-  const [selectedCategory, setSelectedCategory] = useState("all");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [loading, setLoading] = useState(true);
+  const { user } = useAuth();
   const [courses, setCourses] = useState([]);
-  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedInstructor, setSelectedInstructor] = useState("");
 
-  const categories = [
-    { id: "all", name: "All Courses", icon: "🎨" },
-    { id: "drawing", name: "Drawing", icon: "✏️" },
-    { id: "painting", name: "Painting", icon: "🖌️" },
-    { id: "digital", name: "Digital Art", icon: "💻" },
-    { id: "watercolor", name: "Watercolor", icon: "🌊" },
-    { id: "sculpture", name: "Sculpture", icon: "🗿" },
-  ];
-
-  // Fetch courses from API
   useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        setLoading(true);
-        const data = await getCourses();
-        setCourses(data);
-        setError(null);
-      } catch (err) {
-        console.error("Error fetching courses:", err);
-        setError("Failed to load courses. Please try again later.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchCourses();
   }, []);
 
-  const getFilteredCourses = () => {
-    let filtered = courses;
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      const filters = {};
+      if (searchTerm) filters.search = searchTerm;
+      if (selectedInstructor) filters.instructor = selectedInstructor;
 
-    // Filter by category
-    if (selectedCategory !== "all") {
-      filtered = filtered.filter(
-        (course) => course.category === selectedCategory
-      );
+      const data = await getCourses(filters);
+      setCourses(data);
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+      setError("Failed to load courses");
+    } finally {
+      setLoading(false);
     }
-
-    // Filter by search query
-    if (searchQuery) {
-      filtered = filtered.filter((course) => {
-        const title = course.title?.toLowerCase() || "";
-        const instructor = course.instructor?.toLowerCase() || "";
-        const description = course.description?.toLowerCase() || "";
-
-        return (
-          title.includes(searchQuery.toLowerCase()) ||
-          instructor.includes(searchQuery.toLowerCase()) ||
-          description.includes(searchQuery.toLowerCase())
-        );
-      });
-    }
-
-    return filtered;
   };
 
-  const filteredCourses = getFilteredCourses();
+  const handleSearch = (e) => {
+    e.preventDefault();
+    fetchCourses();
+  };
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(price);
+  const handleFilterChange = () => {
+    fetchCourses();
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 md:pt-24 pb-20 md:pb-8">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="flex items-center justify-center min-h-[400px]">
-            <LoadingSpinner />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 md:pt-24 pb-20 md:pb-8">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="text-center py-12">
-            <div className="w-20 h-20 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg
-                className="w-10 h-10 text-red-600 dark:text-red-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-              Error Loading Courses
-            </h3>
-            <p className="text-gray-600 dark:text-gray-400 mb-4">{error}</p>
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-[#FFA726] text-white px-6 py-2 rounded-xl font-medium hover:bg-orange-600 transition-colors"
-            >
-              Try Again
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pt-20 md:pt-24 pb-20 md:pb-8">
+    <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 dark:text-gray-100 mb-4">
-            Learn from the
-            <span className="text-transparent bg-clip-text bg-[#FFA726]">
-              {" "}
-              Best
-            </span>
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Explore Courses
           </h1>
-          <p className="text-xl text-gray-600 dark:text-gray-400 max-w-3xl mx-auto">
-            Master new art techniques with courses taught by professional
-            artists and industry experts
+          <p className="text-xl text-gray-600">
+            Discover amazing courses from talented instructors
           </p>
         </div>
 
-        {/* Search Bar */}
-        <div className="max-w-2xl mx-auto mb-8">
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+        {/* Search and Filters */}
+        <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+          <form
+            onSubmit={handleSearch}
+            className="flex flex-col md:flex-row gap-4"
+          >
+            <div className="flex-1">
+              <input
+                type="text"
+                placeholder="Search courses..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div className="md:w-48">
+              <select
+                value={selectedInstructor}
+                onChange={(e) => {
+                  setSelectedInstructor(e.target.value);
+                  handleFilterChange();
+                }}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Instructors</option>
+                {/* You can populate this with actual instructor names */}
+              </select>
+            </div>
+            <button
+              type="submit"
+              className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Search
+            </button>
+          </form>
+        </div>
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-6">
+            {error}
+          </div>
+        )}
+
+        {/* Courses Grid */}
+        {courses.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {courses.map((course) => (
+              <CourseCard key={course.id} course={course} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12">
+            <div className="text-gray-400 mb-4">
               <svg
-                className="h-5 w-5 text-gray-400 dark:text-gray-500"
+                className="mx-auto h-12 w-12"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+                />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              No courses found
+            </h3>
+            <p className="text-gray-600">
+              {searchTerm || selectedInstructor
+                ? "Try adjusting your search criteria"
+                : "Be the first to create a course!"}
+            </p>
+            {user && (
+              <Link
+                to="/create-course"
+                className="mt-4 inline-block bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700"
+              >
+                Create Course
+              </Link>
+            )}
+          </div>
+        )}
+
+        {/* Create Course CTA */}
+        {user && courses.length > 0 && (
+          <div className="text-center mt-12">
+            <Link
+              to="/create-course"
+              className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              <svg
+                className="w-5 h-5 mr-2"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -155,162 +163,64 @@ const Courses = () => {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                  d="M12 6v6m0 0v6m0-6h6m-6 0H6"
                 />
               </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search courses, instructors, or techniques..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-4 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-2xl focus:ring-2 focus:ring-[#FFA726] focus:border-transparent transition-all shadow-sm text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
-            />
+              Create Your Own Course
+            </Link>
           </div>
-        </div>
-
-        {/* Categories */}
-        <div className="flex flex-wrap justify-center gap-3 mb-12">
-          {categories.map((category) => (
-            <button
-              key={category.id}
-              onClick={() => setSelectedCategory(category.id)}
-              className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all ${
-                selectedCategory === category.id
-                  ? "bg-[#FFA726] text-white shadow-lg"
-                  : "bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:text-[#FFA726] hover:bg-orange-50 dark:hover:bg-orange-900 border border-gray-200 dark:border-gray-700"
-              }`}
-            >
-              <span>{category.icon}</span>
-              <span className="text-sm">{category.name}</span>
-            </button>
-          ))}
-        </div>
-
-        {/* Course Grid */}
-        <div>
-          <div className="flex items-center justify-between mb-8">
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-              All Courses
-            </h2>
-            <div className="flex items-center space-x-4">
-              <span className="text-gray-600 dark:text-gray-400">
-                {filteredCourses.length} course
-                {filteredCourses.length !== 1 ? "s" : ""}
-              </span>
-              {isAuthenticated() && (
-                <Link
-                  to="/create-course"
-                  className="bg-[#FFA726] text-white px-4 py-2 rounded-xl font-medium hover:bg-orange-600 transition-colors flex items-center space-x-2"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 6v6m0 0v6m0-6h6m-6 0H6"
-                    />
-                  </svg>
-                  <span>إنشاء دورة</span>
-                </Link>
-              )}
-            </div>
-          </div>
-
-          {filteredCourses.length === 0 ? (
-            <div className="text-center py-12">
-              <div className="w-20 h-20 bg-gray-200 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-10 h-10 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                  />
-                </svg>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-2">
-                No courses found
-              </h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-4">
-                Try adjusting your search or filter criteria
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {filteredCourses.map((course) => (
-                <Link
-                  key={course.id}
-                  to={`/course/${course.id}`}
-                  className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden group block"
-                >
-                  <div className="relative">
-                    <img
-                      src={
-                        course.course_image ||
-                        "https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&h=300&fit=crop"
-                      }
-                      alt={course.title}
-                      className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute top-4 right-4 bg-[#FFA726] text-white px-3 py-1 rounded-full text-sm font-medium">
-                      {course.is_free ? "Free" : "Paid"}
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-sm text-gray-500 dark:text-gray-400">
-                        {course.is_approved ? "Approved" : "Pending"}
-                      </span>
-                      <div className="flex items-center space-x-1">
-                        <span className="text-yellow-400">★</span>
-                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                          4.5
-                        </span>
-                      </div>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                      {course.title}
-                    </h3>
-                    <p className="text-gray-600 dark:text-gray-400 mb-4 line-clamp-2">
-                      {course.description}
-                    </p>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-8 h-8 bg-[#FFA726] rounded-full flex items-center justify-center">
-                          <span className="text-white text-sm font-medium">
-                            {course.instructor_name?.charAt(0) || "I"}
-                          </span>
-                        </div>
-                        <span className="text-sm text-gray-600 dark:text-gray-300">
-                          {course.instructor_name || "Instructor"}
-                        </span>
-                      </div>
-                      <span className="text-sm font-medium text-gray-900 dark:text-white">
-                        {course.is_free ? "Free" : formatPrice(course.price)}
-                      </span>
-                    </div>
-                    <div className="w-full mt-4 bg-[#FFA726] text-white py-3 rounded-xl font-medium text-center">
-                      View Course
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          )}
-        </div>
+        )}
       </div>
     </div>
+  );
+};
+
+const CourseCard = ({ course }) => {
+  return (
+    <Link
+      to={`/courses/${course.id}`}
+      className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-lg transition-shadow"
+    >
+      {course.thumbnail && (
+        <div className="aspect-video overflow-hidden">
+          <img
+            src={course.thumbnail}
+            alt={course.title}
+            className="w-full h-full object-cover"
+          />
+        </div>
+      )}
+      <div className="p-6">
+        <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2">
+          {course.title}
+        </h3>
+        <p className="text-gray-600 text-sm mb-4 line-clamp-3">
+          {course.description}
+        </p>
+
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <div className="flex items-center">
+              <span className="text-yellow-400">★</span>
+              <span className="text-sm text-gray-700 ml-1">
+                {course.average_rating.toFixed(1)}
+              </span>
+            </div>
+            <span className="text-sm text-gray-500">
+              ({course.total_reviews})
+            </span>
+          </div>
+          <span className="text-green-600 font-semibold">Free</span>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <span>by {course.instructor.username}</span>
+            <span>{course.lessons?.length || 0} lessons</span>
+          </div>
+        </div>
+      </div>
+    </Link>
   );
 };
 
